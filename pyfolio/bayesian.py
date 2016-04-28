@@ -183,7 +183,7 @@ def model_returns_t(data, samples=500):
                          np.sqrt(252))
 
         #start = pm.find_MAP(fmin=sp.optimize.fmin_powell)
-        step = pm.NUTS() #scaling=start)
+        step = pm.Metropolis() #scaling=start)
         trace = pm.sample(samples, step)
     return model, trace
 
