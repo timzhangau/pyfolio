@@ -268,9 +268,10 @@ def model_best(y1, y2, samples=5000, burn=2000):
                          returns_group2.distribution.variance**.5 *
                          np.sqrt(252))
 
-        step = pm.Metropolis()
+        step = pm.NUTS()
 
-        trace = pm.sample(samples, step)[burn:]
+        trace = pm.sample(samples, step)
+
     return model, trace
 
 
