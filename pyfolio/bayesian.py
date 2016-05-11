@@ -33,7 +33,7 @@ from . import _seaborn as sns
 from .timeseries import cum_returns
 
 
-def model_returns_t_alpha_beta(data, bmark, samples=2000):
+def model_returns_t_alpha_beta(data, bmark, samples=5000, burn=2000):
     """Run Bayesian alpha-beta-model with T distributed returns.
 
     This model estimates intercept (alpha) and slope (beta) of two
@@ -98,14 +98,14 @@ def model_returns_t_alpha_beta(data, bmark, samples=2000):
                  mu=mu_reg,
                  sd=sigma,
                  observed=data)
-        start = pm.find_MAP(fmin=sp.optimize.fmin_powell)
-        step = pm.NUTS(scaling=start)
-        trace = pm.sample(samples, step, start=start)
+        #start = pm.find_MAP(fmin=sp.optimize.fmin_powell)
+        step = pm.Metropolis() #NUTS(scaling=start)
+        trace = pm.sample(samples, step)[burn:]
 
     return model, trace
 
 
-def model_returns_normal(data, samples=500):
+def model_returns_normal(data, samples=5000, burn=2000):
     """Run Bayesian model assuming returns are normally distributed.
 
     Parameters
@@ -138,9 +138,9 @@ def model_returns_normal(data, samples=500):
             returns.distribution.variance**.5 *
             np.sqrt(252))
 
-        start = pm.find_MAP(fmin=sp.optimize.fmin_powell)
-        step = pm.NUTS(scaling=start)
-        trace = pm.sample(samples, step, start=start)
+        #start = pm.find_MAP(fmin=sp.optimize.fmin_powell)
+        step = pm.Metropolis() #NUTS(scaling=start)
+        trace = pm.sample(samples, step)[burn:]
     return model, trace
 
 
@@ -188,7 +188,7 @@ def model_returns_t(data, samples=500):
     return model, trace
 
 
-def model_best(y1, y2, samples=1000):
+def model_best(y1, y2, samples=5000, burn=2000):
     """Bayesian Estimation Supersedes the T-Test
 
     This model runs a Bayesian hypothesis comparing if y1 and y2 come
@@ -268,14 +268,14 @@ def model_best(y1, y2, samples=1000):
                          returns_group2.distribution.variance**.5 *
                          np.sqrt(252))
 
-        step = pm.NUTS()
+        step = pm.Metropolis()
 
-        trace = pm.sample(samples, step)
+        trace = pm.sample(samples, step)[burn:]
     return model, trace
 
 
 def plot_best(trace=None, data_train=None, data_test=None,
-              samples=1000, burn=200, axs=None):
+              samples=5000, burn=2000, axs=None):
     """Plot BEST significance analysis.
 
     Parameters
