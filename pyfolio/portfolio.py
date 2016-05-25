@@ -46,7 +46,7 @@ portfolio_rets_equal_weight = portfolio_of_algos(algo_rets, exclude_non_overlapp
 # if 'exclude_non_overlapping=False' then the portfolio returned will span from the
 # earliest startdate of any algo, thru the latest enddate of any algo.
 #
-# 2) Weight of each algo will always be 1/N where N is the total number of algos passed to the function
+# 2) Weight of each algo will be based on inverse volatility weight. E.g. lower volatility assets get higher weights
 
 def portfolio_of_algos_volatility_weighted(algo_rets,
                                            max_weight_factor,
