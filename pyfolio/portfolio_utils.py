@@ -27,7 +27,90 @@ from .utils import APPROX_BDAYS_PER_MONTH, APPROX_BDAYS_PER_YEAR
 from .utils import DAILY, WEEKLY, MONTHLY, YEARLY, ANNUALIZATION_FACTORS
 from .interesting_periods import PERIODS
 
+"""
+# USAGE EXAMPLE -- CONE POSITION WEIGHTED PORTFOLIO:
+# 1) if 'exclude_non_overlapping=True' below, the portfolio will only contains 
+# days which are available across all of the algo return timeseries.
+# if 'exclude_non_overlapping=False' then the portfolio returned will span from the
+# earliest startdate of any algo, thru the latest enddate of any algo.
+# 
+# Weight of holding will be based on how many z-scores away from its mean it is currently
 
+def portfolio_of_algos_cone_weighted(algo_rets, max_weight_factor, exclude_non_overlapping=True):
+    
+    import pyfolio.timeseries
+    
+    total_portfolio, data_df = portfolio_returns_metric_weighted(
+                                        algo_rets.values(), 
+                                        max_weight_factor=max_weight_factor,
+                                        weight_function=cone_z_score,
+                                        weight_function_window=21*13, 
+                                        inverse_weight=True
+                                        )
+    return total_portfolio, data_df
+
+portfolio_rets_cone_weight, raw_data_df = portfolio_of_algos_cone_weighted(
+                                                        algo_rets,
+                                                        max_weight_factor=2.0,
+                                                        exclude_non_overlapping=True)
+                                                        
+"""
+
+def cone_z_score(returns, short_window=21*6, long_window=21*12*5, abs_value=True):
+    
+    long_window_rets = returns[-long_window:-short_window]
+
+    daily_mean_long_window = np.mean( long_window_rets )
+    daily_std_long_window = np.std( long_window_rets)
+    
+    daily_mean_short_window = np.mean( returns[-short_window:] )
+    algo_ret = (1.0 + daily_mean_short_window)**short_window - 1.0
+    
+
+    
+    expected_ret = (1.0 + daily_mean_long_window)**short_window - 1.0
+    expected_std = daily_std_long_window * np.sqrt(short_window)
+    
+    cone_z = (algo_ret - expected_ret) / expected_std
+    
+    if abs_value:
+        cone_z = np.abs(cone_z)
+        
+    return cone_z
+    
+"""
+# USAGE EXAMPLE -- KELLY WEIGHTED PORTFOLIO:
+# 1) if 'exclude_non_overlapping=True' below, the portfolio will only contains 
+# days which are available across all of the algo return timeseries.
+# if 'exclude_non_overlapping=False' then the portfolio returned will span from the
+# earliest startdate of any algo, thru the latest enddate of any algo.
+# 
+# Weight of holding will be based on kelly ratio
+
+def portfolio_of_algos_kelly_weighted(algo_rets, max_weight_factor, exclude_non_overlapping=True):
+    
+    import pyfolio.timeseries
+    
+    total_portfolio, data_df = portfolio_returns_metric_weighted(
+                                        algo_rets.values(), 
+                                        max_weight_factor=max_weight_factor,
+                                        weight_function=kelly_calc,
+                                        weight_function_window=21*13, 
+                                        inverse_weight=False
+                                        )
+    return total_portfolio, data_df
+
+portfolio_rets_kelly_weight, raw_data_df = portfolio_of_algos_kelly_weighted(
+                                                        algo_rets,
+                                                        max_weight_factor=2.0,
+                                                        exclude_non_overlapping=True)
+"""
+
+def kelly_calc(returns, window=21*12):
+    rets = returns[-window:]
+    return np.mean(rets) / np.var(rets)
+    
+# helper function to create discretized buckets for all values in input vector
 def bucket_std(value, bins=[0.12, 0.15, 0.18, 0.21], max_default=0.24):
     """
     Simple quantizing function. For use in binning stdevs into a "buckets"
@@ -53,7 +136,7 @@ def bucket_std(value, bins=[0.12, 0.15, 0.18, 0.21], max_default=0.24):
 
     return max_default
 
-
+# helper function to winsorize volatility values to upper and lower bounds
 def min_max_vol_bounds(value, lower_bound=0.12, upper_bound=0.24):
     """
     Restrict volatility weighting of the lowest volatility asset versus the
