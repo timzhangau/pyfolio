@@ -27,6 +27,47 @@ from .utils import APPROX_BDAYS_PER_MONTH, APPROX_BDAYS_PER_YEAR
 from .utils import DAILY, WEEKLY, MONTHLY, YEARLY, ANNUALIZATION_FACTORS
 from .interesting_periods import PERIODS
 
+"""
+# USAGE EXAMPLE -- EQUAL WEIGHT PORTFOLIO:
+# 1) if 'exclude_non_overlapping=True' below, the portfolio will only contains 
+# days which are available across all of the algo return timeseries.
+# if 'exclude_non_overlapping=False' then the portfolio returned will span from the
+# earliest startdate of any algo, thru the latest enddate of any algo.
+#
+# 2) Weight of each algo will always be 1/N where N is the total number of algos passed to the function
+
+portfolio_rets_equal_weight = portfolio_of_algos(algo_rets, exclude_non_overlapping=True)
+"""
+
+"""
+# USAGE EXAMPLE -- VOLATILITY WEIGHT PORTFOLIO:
+# 1) if 'exclude_non_overlapping=True' below, the portfolio will only contains 
+# days which are available across all of the algo return timeseries.
+# if 'exclude_non_overlapping=False' then the portfolio returned will span from the
+# earliest startdate of any algo, thru the latest enddate of any algo.
+#
+# 2) Weight of each algo will always be 1/N where N is the total number of algos passed to the function
+
+def portfolio_of_algos_volatility_weighted(algo_rets,
+                                           max_weight_factor,
+                                           exclude_non_overlapping=True):
+    
+    import pyfolio.timeseries
+    
+    total_portfolio, data_df = portfolio_returns_metric_weighted(
+                                        algo_rets.values(), 
+                                        weight_function=pf.timeseries.annual_volatility,
+                                        weight_function_window=63,                                 
+                                        max_weight_factor=max_weight_factor,
+                                        exclude_non_overlapping=exclude_non_overlapping,
+                                        inverse_weight=True)
+    return total_portfolio, data_df
+
+portfolio_rets_vol_weight, raw_data_df = portfolio_of_algos_volatility_weighted(
+                                                algo_rets,
+                                                max_weight_factor=2.0,
+                                                exclude_non_overlapping=True)
+"""
 
 def portfolio_returns(holdings_returns, exclude_non_overlapping=True):
     """Generates an equal-weight portfolio.
@@ -56,13 +97,32 @@ def portfolio_returns(holdings_returns, exclude_non_overlapping=True):
     return port / len(holdings_returns)
 
 
+def portfolio_of_algos(algo_rets, exclude_non_overlapping=True):
+    import pyfolio.timeseries
+    
+    total_portfolio = portfolio_returns(algo_rets.values(), exclude_non_overlapping=exclude_non_overlapping)
+    return total_portfolio
+
+
+def min_max_scale_weights(raw_arr, max_weight_factor=2.0):
+    min_max_ratio = max(raw_arr) / min(raw_arr)
+    
+    if min_max_ratio <= 0 or min_max_ratio > max_weight_factor:
+        min_max = sklearn.preprocessing.MinMaxScaler(feature_range=(1, max_weight_factor), copy=True)
+        temp_re = raw_arr.reshape(-1,1)
+        return min_max.fit_transform(temp_re).flatten()
+    else:
+        return raw_arr
+        
+
 def portfolio_returns_metric_weighted(holdings_returns,
                                       exclude_non_overlapping=True,
                                       weight_function=None,
                                       weight_function_window=None,
                                       inverse_weight=False,
                                       portfolio_rebalance_rule='q',
-                                      weight_func_transform=None):
+                                      max_weight_factor=None
+                                      ):
     """
     Generates an equal-weight portfolio, or portfolio weighted by
     weight_function
@@ -86,8 +146,10 @@ def portfolio_returns_metric_weighted(holdings_returns,
     portfolio_rebalance_rule : string, optional
        A pandas.resample valid rule. Specifies how frequently to compute
        the weighting criteria
-    weight_func_transform : function, optional
-       Function applied to value returned from weight_function
+    max_weight_factor : float, optional
+       Max amount that one any algo's weight can be relative to any other, based on the weight_function.
+       E.g. Value of 2 means no algo can have a weight more than 2x another algo.
+    
     Returns
     -------
     (pd.Series, pd.DataFrame)
@@ -115,25 +177,35 @@ def portfolio_returns_metric_weighted(holdings_returns,
             how='last')
         holdings_df = holdings_df.join(
             holdings_func_rebal, rsuffix='_f').fillna(method='ffill').dropna()
-        if weight_func_transform is None:
-            holdings_func_rebal_t = holdings_func_rebal
-            holdings_df = holdings_df.join(
-                holdings_func_rebal_t,
-                rsuffix='_t').fillna(method='ffill').dropna()
+        
+        if max_weight_factor is not None:
+            func_cols = list(map(lambda s: s.endswith('_f'), holdings_df.columns))
+            holdings_df_f = holdings_df.ix[:,func_cols]
+            
+            scaled_rows = [ min_max_scale_weights(ir[1].values, max_weight_factor=max_weight_factor) 
+                               for ir in list(holdings_df_f.iterrows()) ]
+            scaled_rows_df = pd.DataFrame(scaled_rows)
+            
+            columns_t = list(map(lambda x: x+"_t",  holdings_cols))
+            scaled_rows_df.columns = columns_t        
+            for col_idx in scaled_rows_df.columns.values:
+                holdings_df[col_idx] = scaled_rows_df[col_idx].values
         else:
-            holdings_func_rebal_t = holdings_func_rebal.applymap(
-                weight_func_transform)
-            holdings_df = holdings_df.join(
-                holdings_func_rebal_t,
-                rsuffix='_t').fillna(method='ffill').dropna()
+            holdings_func_rebal_t = holdings_func_rebal
+            holdings_df = holdings_df.join( holdings_func_rebal_t,
+                                            rsuffix='_t').fillna(method='ffill').dropna()
+
         transform_columns = list(map(lambda x: x+"_t", holdings_cols))
+        
         if inverse_weight:
+            print "Applying inverse weight for metric..."
             inv_func = 1.0 / holdings_df[transform_columns]
             holdings_df_weights = inv_func.div(inv_func.sum(axis=1),
                                                axis='index')
         else:
             holdings_df_weights = holdings_df[transform_columns] \
-                .div(holdings_df[transform_columns].sum(axis=1), axis='index')
+                .div(holdings_df[transform_columns].sum(axis=1), 
+                     axis='index')
 
         holdings_df_weights.columns = holdings_cols
         holdings_df = holdings_df.join(holdings_df_weights, rsuffix='_w')
