@@ -76,8 +76,8 @@ def portfolio_of_algos_risk_budget_weighted(algo_rets,
                                             max_weight_factor,
                                             risk_budget_vol=0.06,
                                             unconstrained_gross_leverage=True,
-                                            volatility_lookback_window=63
-                                            portfolio_rebalance_rule='m'
+                                            volatility_lookback_window=63,
+                                            portfolio_rebalance_rule='m',
                                             exclude_non_overlapping=True):
     
     import pyfolio.timeseries
